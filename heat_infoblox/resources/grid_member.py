@@ -32,11 +32,22 @@ from oslo_concurrency import lockutils
 LOG = logging.getLogger(__name__)
 
 
+def port_dhcp_enabled(port_info, ip_version):
+    status = None
+    subnet_str = ip_version + '_subnet'
+
+    if port_info[ip_version] and port_info[subnet_str]:
+        status = port_info[subnet_str]['enable_dhcp']
+
+    return status
+
+
 class GridMember(resource.Resource):
     '''A resource which represents an Infoblox Grid Member.
 
     This is used to provision new grid members on an existing grid. See the
-    Grid Master resource to create a new grid.
+    Grid Master resource to create a new grid.  An HA pair is considered
+    a single member.
     '''
 
     PROPERTIES = (
@@ -86,6 +97,19 @@ class GridMember(resource.Resource):
         'is_unbound_capable'
     )
 
+    SOT_MODELS = (
+        'IB-FLEX',
+        'IB-V805',
+        'IB-V815',
+        'IB-V825',
+        'IB-V1415',
+        'IB-V1425',
+        'IB-V2215',
+        'IB-V2225',
+        'IB-V4015',
+        'IB-V4025'
+    )
+
     ALLOWED_MODELS = (
         'CP-V1400',
         'CP-V2200',
@@ -99,6 +123,7 @@ class GridMember(resource.Resource):
         'IB-VM-810',
         'IB-VM-820',
         'IB-VM-RSP',
+        'IB-VNIOS',
         'Rev1',
         'Rev2'
     )
@@ -112,17 +137,33 @@ class GridMember(resource.Resource):
         'fireeye',
         'ms_management',
         'rpz',
-        'vnios')
+        'sw_tp',
+        'tp_sub',
+        'vnios',
+        'nios')
 
     ALLOWED_LICENSES_TEMP = (
-        'dns',
-        'rpz',
         'cloud',
         'cloud_api',
+        'dhcp',
+        'dns',
+        'dnsqrw',
+        'dtc',
         'enterprise',
+        'fireeye',
+        'flex_grid',
         'ipam',
-        'vnios',
-        'reporting')
+        'load_bal',
+        'ms_management',
+        'nios',
+        'qrd',
+        'reporting',
+        'rpz',
+        'sec_eco',
+        'sw_tp',
+        'threat_anl',
+        'tp_sub',
+        'vnios')
 
     ALLOWED_CONFIG_ADDR_TYPES = (
         'IPV4',
@@ -143,7 +184,7 @@ class GridMember(resource.Resource):
             properties.Schema.STRING,
             _('Infoblox model name.'),
             constraints=[
-                constraints.AllowedValues(ALLOWED_MODELS)
+                constraints.AllowedValues(ALLOWED_MODELS + SOT_MODELS)
             ]),
         LICENSES: properties.Schema(
             properties.Schema.LIST,
@@ -161,7 +202,7 @@ class GridMember(resource.Resource):
                 properties.Schema.STRING
             ),
             constraints=[
-                constraints.AllowedValues(ALLOWED_LICENSES_TEMP)
+                constraints.AllowedValues(ALLOWED_LICENSES_TEMP + SOT_MODELS)
             ]),
         REMOTE_CONSOLE: properties.Schema(
             properties.Schema.BOOLEAN,
@@ -171,7 +212,7 @@ class GridMember(resource.Resource):
             _('The password to use for the admin user.')),
         GM_IP: properties.Schema(
             properties.Schema.STRING,
-            _('The Gridmaster IP address.'),
+            _('The Gridmaster IP address as seen by the member.'),
             required=True),
         GM_CERTIFICATE: properties.Schema(
             properties.Schema.STRING,
@@ -259,39 +300,49 @@ class GridMember(resource.Resource):
             attributes.Schema.STRING)
     }
 
-    def _make_network_settings(self, ip):
+    def _make_ipv4_settings(self, ip):
         subnet = self.client('neutron').show_subnet(ip['subnet_id'])['subnet']
         ipnet = netaddr.IPNetwork(subnet['cidr'])
-        vip = {
+        addr_info = {
             'address': ip['ip_address'],
             'subnet_mask': str(ipnet.netmask),
             'gateway': subnet['gateway_ip']
         }, subnet
         if self.properties[self.VIP_VLAN_ID]:
-            vip['vlan_id'] = self.properties[self.VIP_VLAN_ID]
-        return vip
+            addr_info['vlan_id'] = self.properties[self.VIP_VLAN_ID]
+
+        return addr_info
 
     def _make_ipv6_settings(self, ip):
         subnet = self.client('neutron').show_subnet(ip['subnet_id'])['subnet']
         prefix = netaddr.IPNetwork(subnet['cidr'])
         autocfg = subnet['ipv6_ra_mode'] == "slaac"
-        vip6 = {
+        addr_info = {
             'virtual_ip': ip['ip_address'],
             'cidr_prefix': int(prefix.prefixlen),
             'gateway': subnet['gateway_ip'], 'enabled': True,
             'auto_router_config_enabled': autocfg
         }, subnet
         if self.properties[self.VIP6_VLAN_ID]:
-            vip6['vlan_id'] = self.properties[self.VIP6_VLAN_ID]
-        return vip6
+            addr_info['vlan_id'] = self.properties[self.VIP6_VLAN_ID]
+
+        return addr_info
 
     def infoblox(self):
+        '''
+        Returns an object_manipulator connected to the GM
+        '''
         if not getattr(self, 'infoblox_object', None):
             conn = self.properties[constants.CONNECTION]
             self.infoblox_object = resource_utils.connect_to_infoblox(conn)
+
         return self.infoblox_object
 
     def _make_port_network_settings(self, port_name, return_subnets=False):
+        '''
+        Return the settings for the given port based on what neutron knows
+        about the given port.
+        '''
         if self.properties[port_name] is None:
             return None
 
@@ -305,19 +356,30 @@ class GridMember(resource.Resource):
         ipv6 = None
         ipv4_subnet = None
         ipv6_subnet = None
+
         for ip in port['fixed_ips']:
             if ':' in ip['ip_address'] and ipv6 is None:
                 ipv6, ipv6_subnet = self._make_ipv6_settings(ip)
             else:
                 if ipv4 is None:
-                    ipv4, ipv4_subnet = self._make_network_settings(ip)
-        result = {'ipv4': ipv4, 'ipv6': ipv6}
+                    ipv4, ipv4_subnet = self._make_ipv4_settings(ip)
+
+        result = { 'ipv4': ipv4, 'ipv6': ipv6 }
+
         if return_subnets:
             result['ipv4_subnet'] = ipv4_subnet
             result['ipv6_subnet'] = ipv6_subnet
+
         return result
 
     def handle_create(self):
+        '''
+        This routine sets up the member definitions on the GM using API
+        calls - creates the member, preprovisions it, and if requested,
+        turns on the DNS service.
+        '''
+        # First collect information on the networks that the member
+        # will be connected to.
         mgmt = self._make_port_network_settings(self.MGMT_PORT)
         lan1 = self._make_port_network_settings(self.LAN1_PORT)
         lan2 = self._make_port_network_settings(self.LAN2_PORT)
@@ -325,6 +387,14 @@ class GridMember(resource.Resource):
         name = self.properties[self.NAME]
         nat = self.properties[self.NAT_IP]
 
+        hwtype = 'IB-VNIOS'
+        hwmodel = self.properties[self.MODEL]
+        # hwtype and hwmodel are reversed for SoT models
+        if hwmodel in self.SOT_MODELS:
+            hwtype = hwmodel
+            hwmodel = None
+
+        # Create the member definition on the GM
         ha_pair = self.properties[self.HA_PAIR]
         if ha_pair:
             vrid = self.properties[self.VIRTUAL_ROUTER_ID]
@@ -345,27 +415,42 @@ class GridMember(resource.Resource):
                      self.properties[self.NODE2_HA_PORT]))
             # Create infoblox HA pair member
             self.infoblox().create_member(
-                name=name, config_addr_type=config_addr_type,
-                mgmt=mgmt, vip=vip, lan2=lan2, nat_ip=nat,
-                ha_pair=ha_pair, use_v4_vrrp=use_ipv4_vip,
-                node1_ha=node1_ha, node2_ha=node2_ha,
-                node1_lan1=lan1, node2_lan1=node2_lan1,
-                node2_mgmt=node2_mgmt, vrid=vrid, lan2_vrid=lan2_vrid)
+                name=name,
+                config_addr_type=config_addr_type,
+                mgmt=mgmt,
+                vip=vip,
+                lan2=lan2,
+                nat_ip=nat,
+                ha_pair=ha_pair,
+                use_v4_vrrp=use_ipv4_vip,
+                node1_ha=node1_ha,
+                node2_ha=node2_ha,
+                node1_lan1=lan1,
+                node2_lan1=node2_lan1,
+                node2_mgmt=node2_mgmt,
+                vrid=vrid,
+                lan2_vrid=lan2_vrid)
         else:
-            self.infoblox().create_member(name=name, mgmt=mgmt, vip=lan1,
-                                          lan2=lan2, nat_ip=nat)
+            self.infoblox().create_member( name=name,
+                                           mgmt=mgmt,
+                                           vip=lan1,
+                                           lan2=lan2,
+                                           nat_ip=nat)
 
+        # Preprovision the member on the GM
         self.infoblox().pre_provision_member(
             name,
-            hwmodel=self.properties[self.MODEL], hwtype='IB-VNIOS',
-            licenses=self.properties[self.LICENSES], ha_pair=ha_pair)
+            hwmodel=hwmodel,
+            hwtype=hwtype,
+            licenses=self.properties[self.LICENSES],
+            ha_pair=ha_pair)
 
+        # On the GM, set the DNS service for the member as enabled
         dns = self.properties[self.DNS_SETTINGS]
         if dns:
             self.infoblox().configure_member_dns(
                 name,
-                enable_dns=dns['enable']
-            )
+                enable_dns=dns['enable'])
 
         self.resource_id_set(name)
 
@@ -394,22 +479,77 @@ class GridMember(resource.Resource):
             self._remove_from_all_ns_groups()
             self.infoblox().delete_member(self.resource_id)
 
-    def _get_dhcp_status_for_port(self, port_settings):
+    def _get_dhcp_status_for_port(self, port_info):
+        '''
+        Returns a dict of booleans of whether DHCP is enabled on the IPv4/IPv6
+        subnets associated with the given port.
+        '''
         status = {'ipv4': False,
                   'ipv6': False}
 
-        if port_settings['ipv4'] and port_settings['ipv4_subnet']:
-            status['ipv4'] = port_settings['ipv4_subnet']['enable_dhcp']
+        if port_info['ipv4'] and port_info['ipv4_subnet']:
+            status['ipv4'] = port_info['ipv4_subnet']['enable_dhcp']
 
-        if port_settings['ipv6'] and port_settings['ipv6_subnet']:
-            status['ipv6'] = port_settings['ipv6_subnet']['enable_dhcp']
+        if port_info['ipv6'] and port_info['ipv6_subnet']:
+            status['ipv6'] = port_info['ipv6_subnet']['enable_dhcp']
+
         return status
 
+    def _make_port_user_data(self, port_name, member):
+        '''
+        Create the port part of the user-data file.  Return it as a string.
+        Node refers to which node of an HA pair's port is being referenced.
+        '''
+        port_info = self._make_port_network_settings( port_name,
+                                                      return_subnets=True)
+        if port_info is None:
+            return "# " + port_name + ": unable to retrieve port info\n"
+
+        # Decide which IP version address(es) to include.
+        # Do not include port IP addresses if dhcp is enabled in subnet
+        # The mgmt IP address is in 'mgmt_network_setting'
+        vip = member.get('vip_setting', None)
+        need_ipv4 = vip and not port_dhcp_enabled(port_info, 'ipv4')
+
+        ipv6 = member.get('ipv6_setting', None)
+        if ipv6 and not ipv6.get('enabled', False):
+            ipv6 = None
+        need_ipv6 = ipv6 and not port_dhcp_enabled(port_info, 'ipv6')
+
+        result = ''
+        if need_ipv4 or need_ipv6:
+            result = '%s:\n' % port_name.lower().replace("node2_", "")
+
+        if need_ipv4:
+            result += '  v4_addr: %s\n' % port_info['ipv4']['address']
+            result += '  v4_netmask: %s\n' % port_info['ipv4']['subnet_mask']
+            result += '  v4_gw: %s\n' % port_info['ipv4']['gateway']
+
+        if need_ipv6:
+            result += '  v6_addr: %s\n' % port_info['ipv6']['virtual_ip']
+            result += '  v6_cidr: %s\n' % port_info['ipv6']['cidr_prefix']
+            #if not ipv6['auto_router_config_enabled']:
+            #result += '  v6_gw: %s\n' % ipv6['gateway']
+            result += '  v6_gw: %s\n' % port_info['ipv6']['gateway']
+
+        return result
+
     def _make_user_data(self, member, token, node=0):
+        '''
+        Returns a user-data file for the member as a string.
+        The "remote_console_enabled", "default_admin_password", "gridmaster",
+        and "temp_license" fields are generated from the properties of this
+        resource; the lan1 port information is generated from values in
+        neutron.
+        '''
+        # member contains information about the member retrieved from
+        # the gridmaster
         user_data = '#infoblox-config\n\n'
 
         temp_licenses = self.properties[self.TEMP_LICENSES]
         if temp_licenses and len(temp_licenses) > 0:
+            # Insert the model immediately after the NIOS license, if it
+            # is present.
             user_data += 'temp_license: %s\n' % ','.join(temp_licenses)
 
         remote_console = self.properties[self.REMOTE_CONSOLE]
@@ -420,37 +560,14 @@ class GridMember(resource.Resource):
         if admin_password is not None:
             user_data += 'default_admin_password: %s\n' % admin_password
 
-        vip = member.get('vip_setting', None)
-        ipv6 = member.get('ipv6_setting', None)
-        enable_ha = member.get('enable_ha', False)
-        if ipv6 and not ipv6.get('enabled', False):
-            ipv6 = None
-
-        lan1 = self._make_port_network_settings(self.LAN1_PORT,
-                                                return_subnets=True)
-        dhcp_status = self._get_dhcp_status_for_port(lan1)
-        # Do not generate userdata for port if dhcp is enabled in subnet
-        need_vip = vip and not dhcp_status.get('ipv4')
-        need_ipv6 = ipv6 and not dhcp_status.get('ipv6')
-
-        if need_vip or need_ipv6:
-            user_data += 'lan1:\n'
-
-        if need_vip:
-            if enable_ha:
-                node_info = member.get('node_info')
-                user_data += '  v4_addr: %s\n' % node_info[
-                    node]['lan_ha_port_setting']['mgmt_lan']
-            else:
-                user_data += '  v4_addr: %s\n' % vip['address']
-            user_data += '  v4_netmask: %s\n' % vip['subnet_mask']
-            user_data += '  v4_gw: %s\n' % vip['gateway']
-
-        if need_ipv6:
-            user_data += '  v6_addr: %s\n' % ipv6['virtual_ip']
-            user_data += '  v6_cidr: %s\n' % ipv6['cidr_prefix']
-            if not ipv6['auto_router_config_enabled']:
-                user_data += '  v6_gw: %s\n' % ipv6['gateway']
+        if node == 0:
+            user_data += self._make_port_user_data(self.LAN1_PORT, member)
+            user_data += self._make_port_user_data(self.MGMT_PORT, member)
+        else:
+            if self.NODE2_LAN1_PORT in self.properties:
+                user_data += self._make_port_user_data(self.NODE2_LAN1_PORT, member)
+            if self.NODE2_MGMT_PORT in self.properties:
+                user_data += self._make_port_user_data(self.NODE2_MGMT_PORT, member)
 
         if token and len(token) > 0:
             user_data += 'gridmaster:\n'
@@ -465,9 +582,15 @@ class GridMember(resource.Resource):
         return user_data
 
     def _get_member_tokens(self, member):
+        '''
+        Get the token that the member must use to join the grid from the GM.
+        If no token has been generated for the member yet, this function
+        requests that one be created, then retrieves the created token.
+        '''
         token = self.infoblox().connector.call_func(
             'read_token',
             member['_ref'], {})['pnode_tokens']
+
         if len(token) == 0:
             self.infoblox().connector.call_func(
                 'create_token',
@@ -475,24 +598,36 @@ class GridMember(resource.Resource):
             token = self.infoblox().connector.call_func(
                 'read_token',
                 member['_ref'], {})['pnode_tokens']
+
         return token
 
     def _resolve_attribute(self, name):
+        '''
+        Generate the given attribute for this member.
+        Only supports "user_data", "node2_user_data", and "name"
+        Each attribute value is generated (or potentially re-generated)
+        when the function is called.
+        '''
         member_name = self.resource_id
         member = self.infoblox().get_member_obj(
             member_name,
             fail_if_no_member=True,
             return_fields=['host_name', 'vip_setting', 'ipv6_setting',
                            'enable_ha', 'node_info'])
+
         LOG.debug("MEMBER for %s = %s" % (name, member))
+
         if name == self.USER_DATA:
             token = self._get_member_tokens(member)
             return self._make_user_data(member, token, 0)
+
         if name == self.NODE2_USER_DATA:
             token = self._get_member_tokens(member)
             return self._make_user_data(member, token, 1)
+
         if name == self.NAME_ATTR:
             return member['host_name']
+
         return None
 
 

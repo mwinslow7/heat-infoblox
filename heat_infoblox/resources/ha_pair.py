@@ -130,7 +130,7 @@ class HaPair(resource.Resource):
     }
 
     def node(self, ip, username, password, sslverify=False, max_retries=30):
-        conn = {'url': 'https://%s/wapi/v2.3/' % ip,
+        conn = {'url': 'https://%s/wapi/v2.6/' % ip,
                 'username': username,
                 'password': password,
                 'sslverify': sslverify,

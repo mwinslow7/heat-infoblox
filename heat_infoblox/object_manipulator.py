@@ -99,10 +99,8 @@ class InfobloxObjectManipulator(object):
                     # Check that node2 MGMT IPv4 address available
                     resource_utils.get_ip_address(node2_mgmt, True,
                                                   'node2_MGMT')
-                    extra_data['node_info'][0] = {
-                        'mgmt_network_setting': mgmt['ipv4']}
-                    extra_data['node_info'][1] = {
-                        'mgmt_network_setting': node2_mgmt['ipv4']}
+                    extra_data['node_info'][0]['mgmt_network_setting'] = mgmt['ipv4']
+                    extra_data['node_info'][1]['mgmt_network_setting'] = node2_mgmt['ipv4']
                 else:
                     extra_data['node_info'] = [
                         {'mgmt_network_setting': mgmt['ipv4']}]
@@ -140,7 +138,9 @@ class InfobloxObjectManipulator(object):
             licenses = []
         if not isinstance(licenses, list):
             licenses = [licenses]
-        hw_info = {'hwmodel': hwmodel, 'hwtype': hwtype}
+        hw_info = {'hwtype': hwtype}
+        if hwmodel is not None:
+            hw_info['hwmodel'] = hwmodel
         extra_data = {'pre_provisioning': {
             'hardware_info': [hw_info, hw_info] if ha_pair else [hw_info],
             'licenses': licenses}
