@@ -126,7 +126,7 @@ class HaPair(resource.Resource):
     attributes_schema = {
         NAME_ATTR: attributes.Schema(
             _('The member name.'),
-            attributes.Schema.STRING)
+            type=attributes.Schema.STRING)
     }
 
     def node(self, ip, username, password, sslverify=False, max_retries=30):

@@ -291,13 +291,13 @@ class GridMember(resource.Resource):
     attributes_schema = {
         USER_DATA: attributes.Schema(
             _('User data for the Nova boot process.'),
-            attributes.Schema.STRING),
+            type=attributes.Schema.STRING),
         NODE2_USER_DATA: attributes.Schema(
             _('Node 2 user data for the Nova boot process.'),
-            attributes.Schema.STRING),
+            type=attributes.Schema.STRING),
         NAME_ATTR: attributes.Schema(
             _('The member name.'),
-            attributes.Schema.STRING)
+            type=attributes.Schema.STRING)
     }
 
     def _make_ipv4_settings(self, ip):
