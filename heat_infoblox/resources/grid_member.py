@@ -66,7 +66,8 @@ class GridMember(resource.Resource):
         HA_PAIR, VIP_PORT, USE_IPV4_VIP, VIRTUAL_ROUTER_ID,
         LAN2_VIRTUAL_ROUTER_ID,
         NODE2_MGMT_PORT, NODE2_LAN1_PORT, NODE2_LAN2_PORT, NODE2_HA_PORT,
-        VIP_VLAN_ID, VIP6_VLAN_ID, UPDATE_ALLOWED_ADDRESS_PAIRS
+        VIP_VLAN_ID, VIP6_VLAN_ID, UPDATE_ALLOWED_ADDRESS_PAIRS,
+        HARDWARE_TYPE
     ) = (
         'name', 'model', 'licenses', 'temp_licenses',
         'remote_console_enabled', 'admin_password',
@@ -82,7 +83,8 @@ class GridMember(resource.Resource):
         'ha_pair', 'VIP', 'use_ipv4_vip', 'virtual_router_id',
         'lan2_virtual_router_id',
         'node2_MGMT', 'node2_LAN1', 'node2_LAN2', 'node2_HA',
-        'vip_vlan_id', 'vip6_vlan_id', 'update_allowed_address_pairs'
+        'vip_vlan_id', 'vip6_vlan_id', 'update_allowed_address_pairs',
+        'hardware_type'
     )
 
     ATTRIBUTES = (
@@ -127,6 +129,8 @@ class GridMember(resource.Resource):
         'Rev1',
         'Rev2'
     )
+
+    IB_FLEX = 'IB-FLEX'
 
     ALLOWED_LICENSES_PRE_PROVISION = (
         'cloud_api',
@@ -227,6 +231,12 @@ class GridMember(resource.Resource):
         LAN1_PORT: resource_utils.port_schema(LAN1_PORT, True),
         LAN2_PORT: resource_utils.port_schema(LAN2_PORT, False),
         HA_PORT: resource_utils.port_schema(HA_PORT, False),
+        HARDWARE_TYPE: properties.Schema(
+            properties.Schema.STRING,
+            _('Indicates IB-FLEX hardware type.'),
+            constraints=[
+                constraints.AllowedValues([IB_FLEX])
+            ]),
         CONFIG_ADDR_TYPE: properties.Schema(
             properties.Schema.STRING,
             _('Address configuration types.'),
@@ -559,6 +569,10 @@ class GridMember(resource.Resource):
         admin_password = self.properties[self.ADMIN_PASSWORD]
         if admin_password is not None:
             user_data += 'default_admin_password: %s\n' % admin_password
+
+        hwtype = self.properties[self.HARDWARE_TYPE]
+        if hwtype and hwtype == 'IB-FLEX':
+            user_data += 'hardware_type: %s\n' % hwtype
 
         if node == 0:
             user_data += self._make_port_user_data(self.LAN1_PORT, member)
