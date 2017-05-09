@@ -67,7 +67,7 @@ class GridMember(resource.Resource):
         LAN2_VIRTUAL_ROUTER_ID,
         NODE2_MGMT_PORT, NODE2_LAN1_PORT, NODE2_LAN2_PORT, NODE2_HA_PORT,
         VIP_VLAN_ID, VIP6_VLAN_ID, UPDATE_ALLOWED_ADDRESS_PAIRS,
-        HARDWARE_TYPE, USE_VPN_MGMT, GM_JOIN_INTF
+        HARDWARE_TYPE, USE_VPN_MGMT, MEMBER_JOIN_INTF
     ) = (
         'name', 'model', 'licenses', 'temp_licenses',
         'remote_console_enabled', 'admin_password',
@@ -84,7 +84,7 @@ class GridMember(resource.Resource):
         'lan2_virtual_router_id',
         'node2_MGMT', 'node2_LAN1', 'node2_LAN2', 'node2_HA',
         'vip_vlan_id', 'vip6_vlan_id', 'update_allowed_address_pairs',
-        'hardware_type', 'use_vpn_mgmt', 'gm_join_intf'
+        'hardware_type', 'use_vpn_mgmt', 'member_join_intf'
     )
 
     ATTRIBUTES = (
@@ -222,7 +222,7 @@ class GridMember(resource.Resource):
             properties.Schema.STRING,
             _('The Gridmaster SSL certificate for verification.'),
             required=False),
-        GM_JOIN_INTF: properties.Schema(
+        MEMBER_JOIN_INTF: properties.Schema(
             properties.Schema.STRING,
             _('The interface that the member should use to perform the initial'
               ' join to the grid.'),
@@ -603,7 +603,7 @@ class GridMember(resource.Resource):
             user_data += 'gridmaster:\n'
             user_data += '  token: %s\n' % token[node]['token']
             user_data += '  ip_addr: %s\n' % self.properties[self.GM_IP]
-            join_intf = self.properties[self.GM_JOIN_INTF]
+            join_intf = self.properties[self.MEMBER_JOIN_INTF]
             if join_intf is not None:
                 user_data += '  join_intf: %s\n' % join_intf.lower()
             user_data += '  certificate: |\n    %s\n' % self.properties[
