@@ -67,7 +67,7 @@ class GridMember(resource.Resource):
         LAN2_VIRTUAL_ROUTER_ID,
         NODE2_MGMT_PORT, NODE2_LAN1_PORT, NODE2_LAN2_PORT, NODE2_HA_PORT,
         VIP_VLAN_ID, VIP6_VLAN_ID, UPDATE_ALLOWED_ADDRESS_PAIRS,
-        HARDWARE_TYPE, GM_JOIN_INTF
+        HARDWARE_TYPE, USE_VPN_MGMT, GM_JOIN_INTF
     ) = (
         'name', 'model', 'licenses', 'temp_licenses',
         'remote_console_enabled', 'admin_password',
@@ -84,7 +84,7 @@ class GridMember(resource.Resource):
         'lan2_virtual_router_id',
         'node2_MGMT', 'node2_LAN1', 'node2_LAN2', 'node2_HA',
         'vip_vlan_id', 'vip6_vlan_id', 'update_allowed_address_pairs',
-        'hardware_type', 'gm_join_intf'
+        'hardware_type', 'use_vpn_mgmt', 'gm_join_intf'
     )
 
     ATTRIBUTES = (
@@ -197,7 +197,7 @@ class GridMember(resource.Resource):
                 properties.Schema.STRING
             ),
             constraints=[
-                constraints.AllowedValues(ALLOWED_LICENSES_PRE_PROVISION)
+                constraints.AllowedValues(ALLOWED_LICENSES_PRE_PROVISION + SOT_MODELS)
             ]),
         TEMP_LICENSES: properties.Schema(
             properties.Schema.LIST,
@@ -274,6 +274,12 @@ class GridMember(resource.Resource):
             properties.Schema.BOOLEAN,
             required=False,
             default=True
+            ),
+        USE_VPN_MGMT: properties.Schema(
+            properties.Schema.BOOLEAN,
+            _('"True" if member should connect VPN to GM via mgmt port.'),
+            required=False,
+            default=False
             ),
         VIRTUAL_ROUTER_ID: properties.Schema(
             properties.Schema.INTEGER,
@@ -401,6 +407,8 @@ class GridMember(resource.Resource):
         mgmt = self._make_port_network_settings(self.MGMT_PORT)
         lan1 = self._make_port_network_settings(self.LAN1_PORT)
         lan2 = self._make_port_network_settings(self.LAN2_PORT)
+
+        mgmt['vpn_enabled'] = self.properties[self.USE_VPN_MGMT]
 
         name = self.properties[self.NAME]
         nat = self.properties[self.NAT_IP]
@@ -597,7 +605,7 @@ class GridMember(resource.Resource):
             user_data += '  ip_addr: %s\n' % self.properties[self.GM_IP]
             join_intf = self.properties[self.GM_JOIN_INTF]
             if join_intf is not None:
-                user_data += '  join_intf: %s\n' % join_intf
+                user_data += '  join_intf: %s\n' % join_intf.lower()
             user_data += '  certificate: |\n    %s\n' % self.properties[
                 self.GM_CERTIFICATE
             ].replace('\n', '\n    ')

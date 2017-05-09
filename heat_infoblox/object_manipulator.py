@@ -94,7 +94,11 @@ class InfobloxObjectManipulator(object):
             if config_addr_type in ('IPV4', 'BOTH'):
                 # Check that MGMT IPv4 address available
                 resource_utils.get_ip_address(mgmt, True, 'MGMT')
+
                 extra_data['mgmt_port_setting'] = {"enabled": True}
+                if 'vpn_enabled' in mgmt and mgmt['vpn_enabled']:
+                    extra_data['mgmt_port_setting']['vpn_enabled'] = True
+
                 if ha_pair:
                     # Check that node2 MGMT IPv4 address available
                     resource_utils.get_ip_address(node2_mgmt, True,
