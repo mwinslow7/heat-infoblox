@@ -25,6 +25,18 @@ _ = gettext.gettext
 LOG = logging.getLogger(__name__)
 
 
+def _use_ipv4( addr, default):
+    # default configuration is 'IPV4'
+    result = True
+
+    if 'ipv6' in addr:
+        if 'ipv4' in addr:
+            result = default
+        else:
+            result = False
+
+    return result
+
 class InfobloxObjectManipulator(object):
     FIELDS = ['ttl', 'use_ttl']
 
@@ -38,7 +50,7 @@ class InfobloxObjectManipulator(object):
         )
 
     def create_member(self, name=None, platform='VNIOS',
-                      config_addr_type='IPV4', vip=None, mgmt=None, lan2=None,
+                      vip=None, mgmt=None, lan2=None,
                       nat_ip=None,
                       ha_pair=False, use_v4_vrrp=True, vrid=None,
                       node1_ha=None, node2_ha=None,
@@ -51,20 +63,15 @@ class InfobloxObjectManipulator(object):
             # For HA pair we use IPv4 or IPv6 address, not both
             node1 = {}
             node2 = {}
-            if config_addr_type == 'IPV6':
-                ipv4 = False
-            elif config_addr_type == 'BOTH':
-                ipv4 = use_v4_vrrp
-            else:  # default configuration is 'IPV4'
-                ipv4 = True
+
             node1['ha_ip_address'] = resource_utils.get_ip_address(
-                node1_ha, ipv4, 'node1_ha')
+                node1_ha, _use_ipv4(node1_ha, use_v4_vrrp), 'node1_ha')
             node1['mgmt_lan'] = resource_utils.get_ip_address(
-                node1_lan1, ipv4, 'node1_lan1')
+                node1_lan1, _use_ipv4(node1_lan1, use_v4_vrrp), 'node1_lan1')
             node2['ha_ip_address'] = resource_utils.get_ip_address(
-                node2_ha, ipv4, 'node2_ha')
+                node2_ha, _use_ipv4(node2_ha, use_v4_vrrp), 'node2_ha')
             node2['mgmt_lan'] = resource_utils.get_ip_address(
-                node2_lan1, ipv4, 'node2_lan1')
+                node2_lan1, _use_ipv4(node2_lan1, use_v4_vrrp), 'node2_lan1')
             extra_data = {
                 'enable_ha': True,
                 'router_id': vrid,
@@ -74,12 +81,12 @@ class InfobloxObjectManipulator(object):
                     ]
                 }
 
-        if config_addr_type in ('IPV4', 'BOTH'):
+        if 'ipv4' in vip:
             # Check that IPv4 address available
             resource_utils.get_ip_address(vip, True, 'vip')
             # Copy IPv4 address settings
             extra_data['vip_setting'] = vip['ipv4'].copy()
-        if config_addr_type in ('IPV6', 'BOTH'):
+        if 'ipv6' in vip:
             # Check that IPv6 address available
             resource_utils.get_ip_address(vip, False, 'vip')
             # Copy IPv6 address settings
@@ -91,7 +98,7 @@ class InfobloxObjectManipulator(object):
             }
 
         if mgmt:
-            if config_addr_type in ('IPV4', 'BOTH'):
+            if 'ipv4' in mgmt:
                 # Check that MGMT IPv4 address available
                 resource_utils.get_ip_address(mgmt, True, 'MGMT')
 
@@ -108,7 +115,7 @@ class InfobloxObjectManipulator(object):
                 else:
                     extra_data['node_info'] = [
                         {'mgmt_network_setting': mgmt['ipv4']}]
-            if config_addr_type in ('IPV6', 'BOTH'):
+            if 'ipv6' in mgmt:
                 # Check that IPv6 address available
                 resource_utils.get_ip_address(mgmt, False, 'MGMT')
                 extra_data['v6_mgmt_network_setting'] = {"enabled": True}

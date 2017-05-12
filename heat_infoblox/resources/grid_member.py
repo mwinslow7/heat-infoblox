@@ -245,13 +245,6 @@ class GridMember(resource.Resource):
             constraints=[
                 constraints.AllowedValues([IB_FLEX])
             ]),
-        CONFIG_ADDR_TYPE: properties.Schema(
-            properties.Schema.STRING,
-            _('Address configuration types.'),
-            constraints=[
-                constraints.AllowedValues(ALLOWED_CONFIG_ADDR_TYPES)
-            ],
-            default='IPV4'),
         DNS_SETTINGS: properties.Schema(
             properties.Schema.MAP,
             _('The DNS settings for this member.'),
@@ -431,7 +424,6 @@ class GridMember(resource.Resource):
             node2_lan1 = self._make_port_network_settings(self.NODE2_LAN1_PORT)
             node2_mgmt = self._make_port_network_settings(self.NODE2_MGMT_PORT)
             use_ipv4_vip = self.properties[self.USE_IPV4_VIP]
-            config_addr_type = self.properties[self.CONFIG_ADDR_TYPE]
             if self.properties[self.UPDATE_ALLOWED_ADDRESS_PAIRS]:
                 # Add 'allowed_address_pairs' to HA ports.
                 resource_utils.fix_ha_ports_mac(
@@ -442,7 +434,6 @@ class GridMember(resource.Resource):
             # Create infoblox HA pair member
             self.infoblox().create_member(
                 name=name,
-                config_addr_type=config_addr_type,
                 mgmt=mgmt,
                 vip=vip,
                 lan2=lan2,
@@ -663,6 +654,13 @@ class GridMember(resource.Resource):
 
         return None
 
+if TYPES in attributes.Schema.__dict__:
+    GridMember.attributes_schema[GridMember.ATTRIBUTES.USER_DATA].type =
+        attributes.Schema.STRING
+    GridMember.attributes_schema[GridMember.ATTRIBUTES.NODE2_USER_DATA].type =
+        attributes.Schema.STRING
+    GridMember.attributes_schema[GridMember.ATTRIBUTES.NAME_ATTR].type =
+        attributes.Schema.STRING
 
 def resource_mapping():
     return {
