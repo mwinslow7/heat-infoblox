@@ -54,7 +54,7 @@ class GridMember(resource.Resource):
     PROPERTIES = (
         NAME, MODEL, LICENSES, TEMP_LICENSES,
         REMOTE_CONSOLE, ADMIN_PASSWORD,
-        MGMT_PORT, LAN1_PORT, LAN2_PORT, HA_PORT, CONFIG_ADDR_TYPE,
+        MGMT_PORT, LAN1_PORT, LAN2_PORT, HA_PORT,
         GM_IP, GM_CERTIFICATE,
         NAT_IP,
         # only 'enable' supported for now
@@ -72,7 +72,7 @@ class GridMember(resource.Resource):
     ) = (
         'name', 'model', 'licenses', 'temp_licenses',
         'remote_console_enabled', 'admin_password',
-        'MGMT', 'LAN1', 'LAN2', 'HA', 'config_addr_type',
+        'MGMT', 'LAN1', 'LAN2', 'HA',
         'gm_ip', 'gm_certificate',
         'nat_ip',
         'dns', 'enable', 'recursive_resolver', 'ports',
