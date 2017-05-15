@@ -27,6 +27,7 @@ from heat_infoblox import constants
 from heat_infoblox import resource_utils
 
 from oslo_concurrency import lockutils
+from requests.exceptions import ( ConnectionError )
 
 
 LOG = logging.getLogger(__name__)
@@ -307,14 +308,11 @@ class GridMember(resource.Resource):
 
     attributes_schema = {
         USER_DATA: attributes.Schema(
-            _('User data for the Nova boot process.'),
-            type=attributes.Schema.STRING),
+            _('User data for the Nova boot process.')),
         NODE2_USER_DATA: attributes.Schema(
-            _('Node 2 user data for the Nova boot process.'),
-            type=attributes.Schema.STRING),
+            _('Node 2 user data for the Nova boot process.')),
         NAME_ATTR: attributes.Schema(
-            _('The member name.'),
-            type=attributes.Schema.STRING)
+            _('The member name.'))
     }
 
     def _make_ipv4_settings(self, ip):
@@ -493,8 +491,11 @@ class GridMember(resource.Resource):
 
     def handle_delete(self):
         if self.resource_id is not None:
-            self._remove_from_all_ns_groups()
-            self.infoblox().delete_member(self.resource_id)
+            try:
+                self._remove_from_all_ns_groups()
+                self.infoblox().delete_member(self.resource_id)
+            except ConnectionError:
+                LOG.info('Unable to unregister with GM when deleting stack')
 
     def _get_dhcp_status_for_port(self, port_info):
         '''
@@ -654,13 +655,10 @@ class GridMember(resource.Resource):
 
         return None
 
-if TYPES in attributes.Schema.__dict__:
-    GridMember.attributes_schema[GridMember.ATTRIBUTES.USER_DATA].type =
-        attributes.Schema.STRING
-    GridMember.attributes_schema[GridMember.ATTRIBUTES.NODE2_USER_DATA].type =
-        attributes.Schema.STRING
-    GridMember.attributes_schema[GridMember.ATTRIBUTES.NAME_ATTR].type =
-        attributes.Schema.STRING
+if 'TYPES' in attributes.Schema.__dict__:
+    GridMember.attributes_schema[GridMember.USER_DATA].type = attributes.Schema.STRING
+    GridMember.attributes_schema[GridMember.NODE2_USER_DATA].type = attributes.Schema.STRING
+    GridMember.attributes_schema[GridMember.NAME_ATTR].type = attributes.Schema.STRING
 
 def resource_mapping():
     return {
