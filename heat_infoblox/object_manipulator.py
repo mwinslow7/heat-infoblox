@@ -81,12 +81,12 @@ class InfobloxObjectManipulator(object):
                     ]
                 }
 
-        if 'ipv4' in vip:
+        if 'ipv4' in vip and vip['ipv4'] is not None:
             # Check that IPv4 address available
             resource_utils.get_ip_address(vip, True, 'vip')
             # Copy IPv4 address settings
             extra_data['vip_setting'] = vip['ipv4'].copy()
-        if 'ipv6' in vip:
+        if 'ipv6' in vip and vip['ipv6'] is not None:
             # Check that IPv6 address available
             resource_utils.get_ip_address(vip, False, 'vip')
             # Copy IPv6 address settings
@@ -98,7 +98,7 @@ class InfobloxObjectManipulator(object):
             }
 
         if mgmt:
-            if 'ipv4' in mgmt:
+            if 'ipv4' in mgmt and mgmt['ipv4'] is not None:
                 # Check that MGMT IPv4 address available
                 resource_utils.get_ip_address(mgmt, True, 'MGMT')
 
@@ -115,7 +115,7 @@ class InfobloxObjectManipulator(object):
                 else:
                     extra_data['node_info'] = [
                         {'mgmt_network_setting': mgmt['ipv4']}]
-            if 'ipv6' in mgmt:
+            if 'ipv6' in mgmt and mgmt['ipv6'] is not None:
                 # Check that IPv6 address available
                 resource_utils.get_ip_address(mgmt, False, 'MGMT')
                 extra_data['v6_mgmt_network_setting'] = {"enabled": True}
