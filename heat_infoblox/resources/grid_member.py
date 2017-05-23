@@ -33,16 +33,6 @@ from requests.exceptions import ( ConnectionError )
 LOG = logging.getLogger(__name__)
 
 
-def port_dhcp_enabled(port_info, ip_version):
-    status = None
-    subnet_str = ip_version + '_subnet'
-
-    if port_info[ip_version] and port_info[subnet_str]:
-        status = port_info[subnet_str]['enable_dhcp']
-
-    return status
-
-
 class GridMember(resource.Resource):
     '''A resource which represents an Infoblox Grid Member.
 
@@ -399,7 +389,8 @@ class GridMember(resource.Resource):
         lan1 = self._make_port_network_settings(self.LAN1_PORT)
         lan2 = self._make_port_network_settings(self.LAN2_PORT)
 
-        mgmt['vpn_enabled'] = self.properties[self.USE_VPN_MGMT]
+        if mgmt:
+            mgmt['vpn_enabled'] = self.properties[self.USE_VPN_MGMT]
 
         name = self.properties[self.NAME]
         nat = self.properties[self.NAT_IP]
@@ -523,27 +514,21 @@ class GridMember(resource.Resource):
         if port_info is None:
             return "# " + port_name + ": unable to retrieve port info\n"
 
-        # Decide which IP version address(es) to include.
-        # Do not include port IP addresses if dhcp is enabled in subnet
-        # The mgmt IP address is in 'mgmt_network_setting'
         vip = member.get('vip_setting', None)
-        need_ipv4 = vip and not port_dhcp_enabled(port_info, 'ipv4')
-
         ipv6 = member.get('ipv6_setting', None)
         if ipv6 and not ipv6.get('enabled', False):
             ipv6 = None
-        need_ipv6 = ipv6 and not port_dhcp_enabled(port_info, 'ipv6')
 
         result = ''
-        if need_ipv4 or need_ipv6:
+        if vip or ipv6:
             result = '%s:\n' % port_name.lower().replace("node2_", "")
 
-        if need_ipv4:
+        if vip:
             result += '  v4_addr: %s\n' % port_info['ipv4']['address']
             result += '  v4_netmask: %s\n' % port_info['ipv4']['subnet_mask']
             result += '  v4_gw: %s\n' % port_info['ipv4']['gateway']
 
-        if need_ipv6:
+        if ipv6:
             result += '  v6_addr: %s\n' % port_info['ipv6']['virtual_ip']
             result += '  v6_cidr: %s\n' % port_info['ipv6']['cidr_prefix']
             #if not ipv6['auto_router_config_enabled']:
