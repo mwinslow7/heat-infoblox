@@ -25,6 +25,7 @@ from heat.engine import support
 
 from heat_infoblox import constants
 from heat_infoblox import resource_utils
+from heat_infoblox import ibexceptions as exc
 
 from oslo_concurrency import lockutils
 from requests.exceptions import ( ConnectionError )
@@ -597,17 +598,25 @@ class GridMember(resource.Resource):
         If no token has been generated for the member yet, this function
         requests that one be created, then retrieves the created token.
         '''
-        token = self.infoblox().connector.call_func(
-            'read_token',
-            member['_ref'], {})['pnode_tokens']
-
-        if len(token) == 0:
-            self.infoblox().connector.call_func(
-                'create_token',
-                member['_ref'], {})['pnode_tokens']
+        try:
             token = self.infoblox().connector.call_func(
                 'read_token',
                 member['_ref'], {})['pnode_tokens']
+
+            if len(token) == 0:
+                self.infoblox().connector.call_func(
+                    'create_token',
+                    member['_ref'], {})['pnode_tokens']
+                token = self.infoblox().connector.call_func(
+                    'read_token',
+                    member['_ref'], {})['pnode_tokens']
+        except exc.InfobloxFuncException as ife:
+            LOG.debug("Infoblox function exception in get_member_tokens")
+            token = "Unknown"
+        except Exception as ex:
+            LOG.debug("Non-Infoblox exception in get_member_tokens")
+            LOG.debug("exception is %s" % ex.message)
+            token = "Unknown"
 
         return token
 
@@ -618,6 +627,7 @@ class GridMember(resource.Resource):
         Each attribute value is generated (or potentially re-generated)
         when the function is called.
         '''
+        result = None
         member_name = self.resource_id
         member = self.infoblox().get_member_obj(
             member_name,
@@ -629,16 +639,18 @@ class GridMember(resource.Resource):
 
         if name == self.USER_DATA:
             token = self._get_member_tokens(member)
-            return self._make_user_data(member, token, 0)
-
+            try:
+                result = self._make_user_data(member, token, 0)
+            except Exception as ex:
+                LOG.debug("Exception in _make_user_data()")
+                LOG.debug("exception is %s" % ex.message)
         if name == self.NODE2_USER_DATA:
             token = self._get_member_tokens(member)
-            return self._make_user_data(member, token, 1)
-
+            result = self._make_user_data(member, token, 1)
         if name == self.NAME_ATTR:
-            return member['host_name']
+            result = member['host_name']
 
-        return None
+        return result
 
 if 'TYPES' in attributes.Schema.__dict__:
     GridMember.attributes_schema[GridMember.USER_DATA].type = attributes.Schema.STRING
