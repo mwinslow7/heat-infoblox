@@ -598,6 +598,8 @@ class GridMember(resource.Resource):
         If no token has been generated for the member yet, this function
         requests that one be created, then retrieves the created token.
         '''
+        token = [ { 'token': 'Unknown' } ]
+
         try:
             token = self.infoblox().connector.call_func(
                 'read_token',
@@ -612,11 +614,10 @@ class GridMember(resource.Resource):
                     member['_ref'], {})['pnode_tokens']
         except exc.InfobloxFuncException as ife:
             LOG.debug("Infoblox function exception in get_member_tokens")
-            token = "Unknown"
+            LOG.debug("exception is %s" % ife.message)
         except Exception as ex:
             LOG.debug("Non-Infoblox exception in get_member_tokens")
             LOG.debug("exception is %s" % ex.message)
-            token = "Unknown"
 
         return token
 
