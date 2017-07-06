@@ -165,6 +165,18 @@ class InfobloxObjectManipulator(object):
         self._update_infoblox_object('member:dns', {'host_name': member_name},
                                      extra_data)
 
+    def configure_member_dca(self, member_name,
+                             enable_dca=False):
+        extra_data = {'enable_dns_cache_acceleration': enable_dca}
+        self._update_infoblox_object('member:dns', {'host_name': member_name},
+                                     extra_data)
+
+    def configure_member_tp(self, member_name,
+                            enable_tp=False):
+        extra_data = {'enable_service': enable_tp}
+        self._update_infoblox_object('member:threat protection', {'host_name': member_name},
+                                     extra_data)
+
     def delete_member(self, member_name):
         member_data = {'host_name': member_name}
         self._delete_infoblox_object('member', member_data)

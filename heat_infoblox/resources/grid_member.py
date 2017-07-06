@@ -59,7 +59,9 @@ class GridMember(resource.Resource):
         LAN2_VIRTUAL_ROUTER_ID,
         NODE2_MGMT_PORT, NODE2_LAN1_PORT, NODE2_LAN2_PORT, NODE2_HA_PORT,
         VIP_VLAN_ID, VIP6_VLAN_ID, UPDATE_ALLOWED_ADDRESS_PAIRS,
-        HARDWARE_TYPE, USE_VPN_MGMT, MEMBER_JOIN_INTF
+        HARDWARE_TYPE, USE_VPN_MGMT, MEMBER_JOIN_INTF,
+        DCA_SETTINGS, DCA_ENABLE,
+        TP_SETTINGS, TP_ENABLE
     ) = (
         'name', 'model', 'licenses', 'temp_licenses',
         'remote_console_enabled', 'admin_password',
@@ -76,7 +78,9 @@ class GridMember(resource.Resource):
         'lan2_virtual_router_id',
         'node2_MGMT', 'node2_LAN1', 'node2_LAN2', 'node2_HA',
         'vip_vlan_id', 'vip6_vlan_id', 'update_allowed_address_pairs',
-        'hardware_type', 'use_vpn_mgmt', 'member_join_intf'
+        'hardware_type', 'use_vpn_mgmt', 'member_join_intf',
+        'dca', 'enable',
+        'tp', 'enable'
     )
 
     ATTRIBUTES = (
@@ -245,6 +249,28 @@ class GridMember(resource.Resource):
                 DNS_ENABLE: properties.Schema(
                     properties.Schema.BOOLEAN,
                     _('If true, enable DNS on this member.'),
+                    default=False
+                ),
+            }),
+        DCA_SETTINGS: properties.Schema(
+            properties.Schema.MAP,
+            _('The DCA settings for this member.'),
+            required=False,
+            schema={
+                DCA_ENABLE: properties.Schema(
+                    properties.Schema.BOOLEAN,
+                    _('If true, enable DCA on this member.'),
+                    default=False
+                ),
+            }),
+        TP_SETTINGS: properties.Schema(
+            properties.Schema.MAP,
+            _('The TP settings for this member.'),
+            required=False,
+            schema={
+                TP_ENABLE: properties.Schema(
+                    properties.Schema.BOOLEAN,
+                    _('If true, enable TP on this member.'),
                     default=False
                 ),
             }),
@@ -452,12 +478,24 @@ class GridMember(resource.Resource):
             licenses=self.properties[self.LICENSES],
             ha_pair=ha_pair)
 
-        # On the GM, set the DNS service for the member as enabled
+        # On the GM, set the specified services for the member as enabled
         dns = self.properties[self.DNS_SETTINGS]
         if dns:
             self.infoblox().configure_member_dns(
                 name,
                 enable_dns=dns['enable'])
+
+        dca = self.properties[self.DCA_SETTINGS]
+        if dca:
+            self.infoblox().configure_member_dca(
+                name,
+                enable_dca=dca['enable'])
+
+        tp = self.properties[self.TP_SETTINGS]
+        if tp:
+            self.infoblox().configure_member_tp(
+                name,
+                enable_tp=tp['enable'])
 
         self.resource_id_set(name)
 
