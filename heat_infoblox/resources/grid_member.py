@@ -677,12 +677,18 @@ class GridMember(resource.Resource):
         LOG.debug("MEMBER for %s = %s" % (name, member))
 
         if name == self.USER_DATA:
-            token = self._get_member_tokens(member)
-            try:
-                result = self._make_user_data(member, token, 0)
-            except Exception as ex:
-                LOG.debug("Exception in _make_user_data()")
-                LOG.debug("exception is %s" % ex.message)
+            md = self.metadata_get()
+            if self.USER_DATA in md:
+                result = md[self.USER_DATA]
+            else:
+                token = self._get_member_tokens(member)
+                try:
+                    result = self._make_user_data(member, token, 0)
+                except Exception as ex:
+                    LOG.debug("Exception in _make_user_data()")
+                    LOG.debug("exception is %s" % ex.message)
+                md[self.USER_DATA] = result
+                self.metadata_set(md)
         if name == self.NODE2_USER_DATA:
             token = self._get_member_tokens(member)
             result = self._make_user_data(member, token, 1)
