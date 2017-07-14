@@ -174,7 +174,7 @@ class InfobloxObjectManipulator(object):
     def configure_member_tp(self, member_name,
                             enable_tp=False):
         extra_data = {'enable_service': enable_tp}
-        self._update_infoblox_object('member:threat protection', {'host_name': member_name},
+        self._update_infoblox_object('member:threatprotection', {'host_name': member_name},
                                      extra_data)
 
     def delete_member(self, member_name):
