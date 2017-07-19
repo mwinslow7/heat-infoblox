@@ -225,6 +225,7 @@ class HaPair(resource.Resource):
 if 'TYPES' in attributes.Schema.__dict__:
     HaPair.attributes_schema[HaPair.NAME_ATTR].type = attributes.Schema.STRING
 
+
 def resource_mapping():
     return {
         'Infoblox::Grid::HaPair': HaPair,

@@ -187,7 +187,10 @@ class NameServerGroupMember(resource.Resource):
 
 
 if 'TYPES' in attributes.Schema.__dict__:
-    NameServerGroupMember.attributes_schema[NameServerGroupMember.NS_GROUP].type = attributes.Schema.MAP
+    grp_key = NameServerGroupMember.NS_GROUP
+    schema_map = attributes.Schema.MAP
+    NameServerGroupMember.attributes_schema[grp_key].type = schema_map
+
 
 def resource_mapping():
     return {

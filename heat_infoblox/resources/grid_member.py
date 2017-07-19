@@ -24,11 +24,11 @@ from heat.engine import resource
 from heat.engine import support
 
 from heat_infoblox import constants
-from heat_infoblox import resource_utils
 from heat_infoblox import ibexceptions as exc
+from heat_infoblox import resource_utils
 
 from oslo_concurrency import lockutils
-from requests.exceptions import ( ConnectionError )
+from requests.exceptions import (ConnectionError)
 
 
 LOG = logging.getLogger(__name__)
@@ -193,7 +193,8 @@ class GridMember(resource.Resource):
                 properties.Schema.STRING
             ),
             constraints=[
-                constraints.AllowedValues(ALLOWED_LICENSES_PRE_PROVISION + SOT_MODELS)
+                constraints.AllowedValues(ALLOWED_LICENSES_PRE_PROVISION +
+                                          SOT_MODELS)
             ]),
         TEMP_LICENSES: properties.Schema(
             properties.Schema.LIST,
@@ -361,9 +362,7 @@ class GridMember(resource.Resource):
         return addr_info
 
     def infoblox(self):
-        '''
-        Returns an object_manipulator connected to the GM
-        '''
+        """Returns an object_manipulator connected to the GM"""
         if not getattr(self, 'infoblox_object', None):
             conn = self.properties[constants.CONNECTION]
             self.infoblox_object = resource_utils.connect_to_infoblox(conn)
@@ -371,10 +370,10 @@ class GridMember(resource.Resource):
         return self.infoblox_object
 
     def _make_port_network_settings(self, port_name, return_subnets=False):
-        '''
-        Return the settings for the given port based on what neutron knows
-        about the given port.
-        '''
+        """Return the settings for the given port.
+
+        These are based on what neutron knows about the port.
+        """
         if self.properties[port_name] is None:
             return None
 
@@ -396,7 +395,7 @@ class GridMember(resource.Resource):
                 if ipv4 is None:
                     ipv4, ipv4_subnet = self._make_ipv4_settings(ip)
 
-        result = { 'ipv4': ipv4, 'ipv6': ipv6 }
+        result = {'ipv4': ipv4, 'ipv6': ipv6}
 
         if return_subnets:
             result['ipv4_subnet'] = ipv4_subnet
@@ -405,11 +404,11 @@ class GridMember(resource.Resource):
         return result
 
     def handle_create(self):
-        '''
-        This routine sets up the member definitions on the GM using API
-        calls - creates the member, preprovisions it, and if requested,
-        turns on the DNS service.
-        '''
+        """Sets up member definitions on the GM
+
+        This is done using API calls - create the member, preprovision it,
+        and if requested, turn on the DNS service.
+        """
         # First collect information on the networks that the member
         # will be connected to.
         mgmt = self._make_port_network_settings(self.MGMT_PORT)
@@ -464,11 +463,11 @@ class GridMember(resource.Resource):
                 vrid=vrid,
                 lan2_vrid=lan2_vrid)
         else:
-            self.infoblox().create_member( name=name,
-                                           mgmt=mgmt,
-                                           vip=lan1,
-                                           lan2=lan2,
-                                           nat_ip=nat)
+            self.infoblox().create_member(name=name,
+                                          mgmt=mgmt,
+                                          vip=lan1,
+                                          lan2=lan2,
+                                          nat_ip=nat)
 
         # Preprovision the member on the GM
         self.infoblox().pre_provision_member(
@@ -528,10 +527,11 @@ class GridMember(resource.Resource):
                 LOG.info('Unable to unregister with GM when deleting stack')
 
     def _get_dhcp_status_for_port(self, port_info):
-        '''
-        Returns a dict of booleans of whether DHCP is enabled on the IPv4/IPv6
-        subnets associated with the given port.
-        '''
+        """Returns whether DHCP is enabled on the given port
+
+        This is returned as a dict of booleans, with separate entries for
+        IPv4 and IPv6.
+        """
         status = {'ipv4': False,
                   'ipv6': False}
 
@@ -544,12 +544,13 @@ class GridMember(resource.Resource):
         return status
 
     def _make_port_user_data(self, port_name, member):
-        '''
-        Create the port part of the user-data file.  Return it as a string.
+        """Create the port part of the user-data file.
+
+        It gets returned as a string.
         Node refers to which node of an HA pair's port is being referenced.
-        '''
-        port_info = self._make_port_network_settings( port_name,
-                                                      return_subnets=True)
+        """
+        port_info = self._make_port_network_settings(port_name,
+                                                     return_subnets=True)
         if port_info is None:
             return "# " + port_name + ": unable to retrieve port info\n"
 
@@ -562,28 +563,28 @@ class GridMember(resource.Resource):
         if vip or ipv6:
             result = '%s:\n' % port_name.lower().replace("node2_", "")
 
-        if vip:
+        if vip and 'ipv4' in port_info and port_info['ipv4'] is not None:
             result += '  v4_addr: %s\n' % port_info['ipv4']['address']
             result += '  v4_netmask: %s\n' % port_info['ipv4']['subnet_mask']
             result += '  v4_gw: %s\n' % port_info['ipv4']['gateway']
 
-        if ipv6:
+        if ipv6 and 'ipv6' in port_info and port_info['ipv6'] is not None:
             result += '  v6_addr: %s\n' % port_info['ipv6']['virtual_ip']
             result += '  v6_cidr: %s\n' % port_info['ipv6']['cidr_prefix']
-            #if not ipv6['auto_router_config_enabled']:
-            #result += '  v6_gw: %s\n' % ipv6['gateway']
+            # if not ipv6['auto_router_config_enabled']:
+            # result += '  v6_gw: %s\n' % ipv6['gateway']
             result += '  v6_gw: %s\n' % port_info['ipv6']['gateway']
 
         return result
 
     def _make_user_data(self, member, token, node=0):
-        '''
-        Returns a user-data file for the member as a string.
-        The "remote_console_enabled", "default_admin_password", "gridmaster",
-        and "temp_license" fields are generated from the properties of this
+        """Return a user-data file for the member as a string.
+
+        The 'remote_console_enabled', 'default_admin_password', 'gridmaster',
+        and 'temp_license' fields are generated from the properties of this
         resource; the lan1 port information is generated from values in
         neutron.
-        '''
+        """
         # member contains information about the member retrieved from
         # the gridmaster
         user_data = '#infoblox-config\n\n'
@@ -611,9 +612,11 @@ class GridMember(resource.Resource):
             user_data += self._make_port_user_data(self.MGMT_PORT, member)
         else:
             if self.NODE2_LAN1_PORT in self.properties:
-                user_data += self._make_port_user_data(self.NODE2_LAN1_PORT, member)
+                user_data += self._make_port_user_data(self.NODE2_LAN1_PORT,
+                                                       member)
             if self.NODE2_MGMT_PORT in self.properties:
-                user_data += self._make_port_user_data(self.NODE2_MGMT_PORT, member)
+                user_data += self._make_port_user_data(self.NODE2_MGMT_PORT,
+                                                       member)
 
         if token and len(token) > 0:
             user_data += 'gridmaster:\n'
@@ -631,12 +634,12 @@ class GridMember(resource.Resource):
         return user_data
 
     def _get_member_tokens(self, member):
-        '''
-        Get the token that the member must use to join the grid from the GM.
+        """Get the token that the member must use to join the grid from the GM.
+
         If no token has been generated for the member yet, this function
         requests that one be created, then retrieves the created token.
-        '''
-        token = [ { 'token': 'Unknown' } ]
+        """
+        token = [{'token': 'Unknown'}]
 
         try:
             token = self.infoblox().connector.call_func(
@@ -660,12 +663,12 @@ class GridMember(resource.Resource):
         return token
 
     def _resolve_attribute(self, name):
-        '''
-        Generate the given attribute for this member.
+        """Generate the given attribute for this member.
+
         Only supports "user_data", "node2_user_data", and "name"
         Each attribute value is generated (or potentially re-generated)
         when the function is called.
-        '''
+        """
         result = None
         member_name = self.resource_id
         member = self.infoblox().get_member_obj(
@@ -688,7 +691,10 @@ class GridMember(resource.Resource):
                     LOG.debug("Exception in _make_user_data()")
                     LOG.debug("exception is %s" % ex.message)
                 md[self.USER_DATA] = result
-                self.metadata_set(md)
+                try:
+                    self.metadata_set(md)
+                except Exception as ex:
+                    LOG.debug("Unable to set metadata on resource")
         if name == self.NODE2_USER_DATA:
             token = self._get_member_tokens(member)
             result = self._make_user_data(member, token, 1)
@@ -697,10 +703,13 @@ class GridMember(resource.Resource):
 
         return result
 
+
 if 'TYPES' in attributes.Schema.__dict__:
-    GridMember.attributes_schema[GridMember.USER_DATA].type = attributes.Schema.STRING
-    GridMember.attributes_schema[GridMember.NODE2_USER_DATA].type = attributes.Schema.STRING
-    GridMember.attributes_schema[GridMember.NAME_ATTR].type = attributes.Schema.STRING
+    schm_str = attributes.Schema.STRING
+    GridMember.attributes_schema[GridMember.USER_DATA].type = schm_str
+    GridMember.attributes_schema[GridMember.NODE2_USER_DATA].type = schm_str
+    GridMember.attributes_schema[GridMember.NAME_ATTR].type = schm_str
+
 
 def resource_mapping():
     return {

@@ -25,7 +25,7 @@ _ = gettext.gettext
 LOG = logging.getLogger(__name__)
 
 
-def _use_ipv4( addr, default):
+def _use_ipv4(addr, default):
     # default configuration is 'IPV4'
     result = True
 
@@ -36,6 +36,7 @@ def _use_ipv4( addr, default):
             result = False
 
     return result
+
 
 class InfobloxObjectManipulator(object):
     FIELDS = ['ttl', 'use_ttl']
@@ -110,8 +111,9 @@ class InfobloxObjectManipulator(object):
                     # Check that node2 MGMT IPv4 address available
                     resource_utils.get_ip_address(node2_mgmt, True,
                                                   'node2_MGMT')
-                    extra_data['node_info'][0]['mgmt_network_setting'] = mgmt['ipv4']
-                    extra_data['node_info'][1]['mgmt_network_setting'] = node2_mgmt['ipv4']
+                    ntwrk_key = 'mgmt_network_setting'
+                    extra_data['node_info'][0][ntwrk_key] = mgmt['ipv4']
+                    extra_data['node_info'][1][ntwrk_key] = node2_mgmt['ipv4']
                 else:
                     extra_data['node_info'] = [
                         {'mgmt_network_setting': mgmt['ipv4']}]
@@ -174,7 +176,8 @@ class InfobloxObjectManipulator(object):
     def configure_member_tp(self, member_name,
                             enable_tp=False):
         extra_data = {'enable_service': enable_tp}
-        self._update_infoblox_object('member:threatprotection', {'host_name': member_name},
+        self._update_infoblox_object('member:threatprotection',
+                                     {'host_name': member_name},
                                      extra_data)
 
     def delete_member(self, member_name):
