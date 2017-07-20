@@ -379,7 +379,6 @@ class GridMember(resource.Resource):
 
         port = self.client('neutron').show_port(
             self.properties[port_name])['port']
-
         if port is None:
             return None
 
@@ -560,8 +559,6 @@ class GridMember(resource.Resource):
             ipv6 = None
 
         result = ''
-        if vip or ipv6:
-            result = '%s:\n' % port_name.lower().replace("node2_", "")
 
         if vip and 'ipv4' in port_info and port_info['ipv4'] is not None:
             result += '  v4_addr: %s\n' % port_info['ipv4']['address']
@@ -574,6 +571,10 @@ class GridMember(resource.Resource):
             # if not ipv6['auto_router_config_enabled']:
             # result += '  v6_gw: %s\n' % ipv6['gateway']
             result += '  v6_gw: %s\n' % port_info['ipv6']['gateway']
+
+        if result:
+            header = '%s:\n' % port_name.lower().replace("node2_", "")
+            result = header + result
 
         return result
 

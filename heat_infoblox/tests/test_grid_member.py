@@ -45,6 +45,35 @@ grid_member_template = {
 DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
 
 
+class MockNeutronClient(object):
+    def __init__(self, dummy_ports, dummy_subnets):
+        self.dummy_ports = {'port1': {},
+                            'port2': {}}
+        if dummy_ports is not None:
+            self.dummy_ports = dummy_ports
+
+        self.dummy_subnets = {'subnet1': {},
+                              'subnet2': {}}
+        if dummy_subnets is not None:
+            self.dummy_subnets = dummy_subnets
+
+    def show_port(self, name):
+        result = None
+
+        if name in self.dummy_ports:
+            result = {'port': self.dummy_ports[name]}
+
+        return result
+
+    def show_subnet(self, name):
+        result = None
+
+        if name in self.dummy_subnets:
+            result = {'subnet': self.dummy_subnets[name]}
+
+        return result
+
+
 class GridMemberTest(common.HeatTestCase):
     def setUp(self):
         heat_infoblox_path = os.path.abspath(os.path.join(
@@ -93,6 +122,33 @@ class GridMemberTest(common.HeatTestCase):
             {'lan_ha_port_setting': {'mgmt_lan': '1.1.1.2'}},
             {'lan_ha_port_setting': {'mgmt_lan': '1.1.1.3'}}
             ]
+        self.ipv4_subnets = {'subnet1': {'cidr': '1.1.1.0/24',
+                                         'gateway_ip': '1.1.1.1'},
+                             'subnet2': {'cidr': '1.1.2.0/24',
+                                         'gateway_ip': '1.1.2.1'}}
+        self.ipv6_subnets = {'subnet1': {'cidr': '2001:db81::/64',
+                                         'gateway_ip': '2001:db81::1',
+                                         'ipv6_ra_mode': 'slaac'},
+                             'subnet3': {'cidr': '1.1.1.0/24',
+                                         'gateway_ip': '1.1.1.1'}}
+        self.ipv6_ports = {'port1': {'fixed_ips': [
+            {'ip_address': '2001:db81::4',
+             'subnet_id': 'subnet1'}]},
+            'port2': {'fixed_ips': [
+                {'ip_address': '2001:db81::5',
+                 'subnet_id': 'subnet1'}]}}
+        self.ha_ports = {'node1_port1': {'fixed_ips': [
+            {'ip_address': '1.1.1.2',
+             'subnet_id': 'subnet1'}]},
+            'node1_port2': {'fixed_ips': [
+                {'ip_address': '1.1.1.3',
+                 'subnet_id': 'subnet1'}]},
+            'node2_port1': {'fixed_ips': [
+                {'ip_address': '1.1.1.8',
+                 'subnet_id': 'subnet1'}]},
+            'node2_port2': {'fixed_ips': [
+                {'ip_address': '1.1.1.9',
+                 'subnet_id': 'subnet1'}]}}
 
     def set_stack(self, stack_template):
         self.stack = stack.Stack(
@@ -239,6 +295,7 @@ class GridMemberTest(common.HeatTestCase):
         ud = self.my_member._resolve_attribute('user_data')
         self.assertEqual(
             '#infoblox-config\n\n'
+            '# MGMT: unable to retrieve port info\n'
             'gridmaster:\n'
             '  token: abcdefg\n'
             '  ip_addr: 10.1.1.2\n'
@@ -249,7 +306,16 @@ class GridMemberTest(common.HeatTestCase):
             self.ipv4_member)
 
     def test_user_data_lan1_ipv6(self):
-        self.set_member_obj(self.ipv6_member)
+        neutron_client = MockNeutronClient(self.ipv6_ports, self.ipv6_subnets)
+        tmpl = copy.deepcopy(grid_member_template)
+        props = tmpl['resources']['my_member']['properties']
+        props['LAN1'] = 'port1'
+        self.set_stack(tmpl)
+        infoblox_object = self.my_member.infoblox_object
+        infoblox_object.create_member = mock.MagicMock()
+        infoblox_object.get_member_obj.return_value = self.ipv6_member
+        self.my_member.client = mock.Mock()
+        self.my_member.client.return_value = neutron_client
         self.set_token(['abcdefg', 'hijklmnop'])
         ud = self.my_member._resolve_attribute('user_data')
         self.assertEqual(
@@ -257,6 +323,7 @@ class GridMemberTest(common.HeatTestCase):
             '  v6_addr: 2001:db81::4\n'
             '  v6_cidr: 64\n'
             '  v6_gw: 2001:db81::1\n'
+            '# MGMT: unable to retrieve port info\n'
             'gridmaster:\n'
             '  token: abcdefg\n'
             '  ip_addr: 10.1.1.2\n'
@@ -267,12 +334,24 @@ class GridMemberTest(common.HeatTestCase):
             self.ipv6_member)
 
     def test_user_data_lan1_ipv4_6(self):
-        port, subnet = self._make_port_subnet('1.1.1.2', '1.1.1.1',
-                                              '1.1.1.0/24', enable_dhcp=True)
-        port['port']['fixed_ips'].append({'ip_address': '2001:db81::4', 'subnet_id': 'junk2'})
-        self.set_net_info(port, subnet)
+        ipv4_6_ports = {'port1': {'fixed_ips': [
+            {'ip_address': '2001:db81::4',
+             'subnet_id': 'subnet1'},
+            {'ip_address': '1.1.1.2',
+             'subnet_id': 'subnet3'}]},
+            'port2': {'fixed_ips': [
+                {'ip_address': '2001:db81::5',
+                 'subnet_id': 'subnet1'}]}}
+        neutron_client = MockNeutronClient(ipv4_6_ports, self.ipv6_subnets)
+        tmpl = copy.deepcopy(grid_member_template)
+        props = tmpl['resources']['my_member']['properties']
+        props['LAN1'] = 'port1'
+        self.set_stack(tmpl)
+
         self.set_member_obj(self.ipv4_6_member)
         self.set_token(['abcdefg', 'hijklmnop'])
+        self.my_member.client.return_value = neutron_client
+
         ud = self.my_member._resolve_attribute('user_data')
         self.assertEqual(
             '#infoblox-config\n\nlan1:\n'
@@ -282,6 +361,7 @@ class GridMemberTest(common.HeatTestCase):
             '  v6_addr: 2001:db81::4\n'
             '  v6_cidr: 64\n'
             '  v6_gw: 2001:db81::1\n'
+            '# MGMT: unable to retrieve port info\n'
             'gridmaster:\n'
             '  token: abcdefg\n'
             '  ip_addr: 10.1.1.2\n'
@@ -292,11 +372,16 @@ class GridMemberTest(common.HeatTestCase):
             self.ipv4_6_member)
 
     def test_user_data_ipv4_ha(self):
-        port, subnet = self._make_port_subnet('1.1.1.2', '1.1.1.1',
-                                              '1.1.1.0/24', enable_dhcp=True)
-        self.set_net_info(port, subnet)
+        neutron_client = MockNeutronClient(self.ha_ports, self.ipv4_subnets)
+        tmpl = copy.deepcopy(grid_member_template)
+        props = tmpl['resources']['my_member']['properties']
+        props['LAN1'] = 'node1_port1'
+        self.set_stack(tmpl)
+
         self.set_member_obj(self.ipv4_ha_member)
         self.set_token(['abcdefg', 'hijklmnop'])
+        self.my_member.client.return_value = neutron_client
+
         ud = self.my_member._resolve_attribute('user_data')
         self.assertEqual(
             '#infoblox-config\n\nlan1:\n'
@@ -314,12 +399,20 @@ class GridMemberTest(common.HeatTestCase):
             self.ipv4_ha_member)
 
     def test_user_data2_ipv4_ha(self):
+        neutron_client = MockNeutronClient(self.ha_ports, self.ipv4_subnets)
+        tmpl = copy.deepcopy(grid_member_template)
+        props = tmpl['resources']['my_member']['properties']
+        props['node2_LAN1'] = 'node2_port1'
+        self.set_stack(tmpl)
+
         self.set_member_obj(self.ipv4_ha_member)
         self.set_token(['abcdefg', 'hijklmnop'])
+        self.my_member.client.return_value = neutron_client
+
         ud2 = self.my_member._resolve_attribute('node2_user_data')
         self.assertEqual(
             '#infoblox-config\n\nlan1:\n'
-            '  v4_addr: 1.1.1.3\n'
+            '  v4_addr: 1.1.1.8\n'
             '  v4_netmask: 255.255.255.0\n'
             '  v4_gw: 1.1.1.1\n'
             '# node2_MGMT: unable to retrieve port info\n'
