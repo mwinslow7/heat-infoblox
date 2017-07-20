@@ -125,6 +125,9 @@ class GridMemberTest(common.HeatTestCase):
         self.my_member.infoblox_object.create_member = mock.MagicMock()
         return tmpl
 
+    def _empty_ifc_mgmt(self):
+        return {'ipv4': None, 'ipv6': None, 'vpn_enabled': False}
+
     def _empty_ifc(self):
         return {'ipv4': None, 'ipv6': None}
 
@@ -132,7 +135,7 @@ class GridMemberTest(common.HeatTestCase):
         self.set_interface('MGMT')
         self.my_member.handle_create()
         cm = self.my_member.infoblox_object.create_member
-        cm.assert_called_with(name='my-name', mgmt=self._empty_ifc(),
+        cm.assert_called_with(name='my-name', mgmt=self._empty_ifc_mgmt(),
                               vip=self._empty_ifc(), lan2=None, nat_ip=None)
 
     def test_lan2(self):
@@ -147,7 +150,7 @@ class GridMemberTest(common.HeatTestCase):
         self.set_interface('LAN2', tmpl=tmpl)
         self.my_member.handle_create()
         cm = self.my_member.infoblox_object.create_member
-        cm.assert_called_with(name='my-name', mgmt=self._empty_ifc(),
+        cm.assert_called_with(name='my-name', mgmt=self._empty_ifc_mgmt(),
                               vip=self._empty_ifc(), lan2=self._empty_ifc(),
                               nat_ip=None)
 
@@ -183,6 +186,9 @@ class GridMemberTest(common.HeatTestCase):
                          mapping['Infoblox::Grid::Member'])
 
     def test_user_data_lan1_ipv4(self):
+        port, subnet = self._make_port_subnet('1.1.1.2', '1.1.1.1',
+                                              '1.1.1.0/24', enable_dhcp=True)
+        self.set_net_info(port, subnet)
         self.set_member_obj(self.ipv4_member)
         self.set_token(['abcdefg', 'hijklmnop'])
         ud = self.my_member._resolve_attribute('user_data')
@@ -191,6 +197,7 @@ class GridMemberTest(common.HeatTestCase):
             '  v4_addr: 1.1.1.2\n'
             '  v4_netmask: 255.255.255.0\n'
             '  v4_gw: 1.1.1.1\n'
+            '# MGMT: unable to retrieve port info\n'
             'gridmaster:\n'
             '  token: abcdefg\n'
             '  ip_addr: 10.1.1.2\n'
@@ -201,6 +208,9 @@ class GridMemberTest(common.HeatTestCase):
             self.ipv4_member)
 
     def test_user_data_lan1_ipv4_dhcp_disabled(self):
+        port, subnet = self._make_port_subnet('1.1.1.2', '1.1.1.1',
+                                              '1.1.1.0/24', enable_dhcp=True)
+        self.set_net_info(port, subnet)
         dhcp_status = mock.Mock(return_value={'ipv4': False, 'ipv6': True})
         self.set_member_obj(self.ipv4_member)
         self.set_token(['abcdefg', 'hijklmnop'])
@@ -211,6 +221,7 @@ class GridMemberTest(common.HeatTestCase):
             '  v4_addr: 1.1.1.2\n'
             '  v4_netmask: 255.255.255.0\n'
             '  v4_gw: 1.1.1.1\n'
+            '# MGMT: unable to retrieve port info\n'
             'gridmaster:\n'
             '  token: abcdefg\n'
             '  ip_addr: 10.1.1.2\n'
@@ -256,6 +267,10 @@ class GridMemberTest(common.HeatTestCase):
             self.ipv6_member)
 
     def test_user_data_lan1_ipv4_6(self):
+        port, subnet = self._make_port_subnet('1.1.1.2', '1.1.1.1',
+                                              '1.1.1.0/24', enable_dhcp=True)
+        port['port']['fixed_ips'].append({'ip_address': '2001:db81::4', 'subnet_id': 'junk2'})
+        self.set_net_info(port, subnet)
         self.set_member_obj(self.ipv4_6_member)
         self.set_token(['abcdefg', 'hijklmnop'])
         ud = self.my_member._resolve_attribute('user_data')
@@ -277,6 +292,9 @@ class GridMemberTest(common.HeatTestCase):
             self.ipv4_6_member)
 
     def test_user_data_ipv4_ha(self):
+        port, subnet = self._make_port_subnet('1.1.1.2', '1.1.1.1',
+                                              '1.1.1.0/24', enable_dhcp=True)
+        self.set_net_info(port, subnet)
         self.set_member_obj(self.ipv4_ha_member)
         self.set_token(['abcdefg', 'hijklmnop'])
         ud = self.my_member._resolve_attribute('user_data')
@@ -285,6 +303,7 @@ class GridMemberTest(common.HeatTestCase):
             '  v4_addr: 1.1.1.2\n'
             '  v4_netmask: 255.255.255.0\n'
             '  v4_gw: 1.1.1.1\n'
+            '# MGMT: unable to retrieve port info\n'
             'gridmaster:\n'
             '  token: abcdefg\n'
             '  ip_addr: 10.1.1.2\n'
@@ -303,6 +322,7 @@ class GridMemberTest(common.HeatTestCase):
             '  v4_addr: 1.1.1.3\n'
             '  v4_netmask: 255.255.255.0\n'
             '  v4_gw: 1.1.1.1\n'
+            '# node2_MGMT: unable to retrieve port info\n'
             'gridmaster:\n'
             '  token: hijklmnop\n'
             '  ip_addr: 10.1.1.2\n'
@@ -461,7 +481,7 @@ class GridMemberTest(common.HeatTestCase):
             self.my_member._make_port_network_settings.call_args_list)
         infoblox = self.my_member.infoblox_object
         infoblox.create_member.assert_called_once_with(
-            config_addr_type='IPV4', ha_pair=True, lan2=None, lan2_vrid=None,
+            ha_pair=True, lan2=None, lan2_vrid=None,
             mgmt=None, name='my-name', nat_ip=None,
             node1_ha=ports['HA'],
             node1_lan1=ports['LAN1'],
