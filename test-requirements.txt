@@ -9,7 +9,8 @@ coverage>=3.6
 discover
 python-troveclient<2.0.0
 oslo.db<3.0.0
--e git+https://git.openstack.org/openstack/heat.git@liberty-eol#egg=heat
+-e git+https://git.openstack.org/openstack/heat.git@mitaka-eol#egg=heat
+-e git+https://git.openstack.org/openstack/python-glanceclient.git@mitaka-eol#egg=python_glanceclient
 mock>=1.2
 mox>=0.5.3
 mox3>=0.7.0
